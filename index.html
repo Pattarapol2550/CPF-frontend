@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ammonia Chiller 7-Set Diagnostics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50 font-sans antialiased text-gray-800">
+
+    <nav class="bg-slate-800 shadow-lg text-white">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center py-3 gap-3">
+            <h1 class="text-lg font-bold tracking-wide">⚙️ Line Duck 7-Compressors Dashboard</h1>
+            <div class="flex bg-slate-700 p-1 rounded-lg border border-slate-600 shadow-inner">
+                <button id="tab-dash-btn" onclick="switchPage('dashboard')" class="px-4 py-1.5 rounded-md font-medium text-sm transition bg-blue-600 text-white shadow">📊 แดชบอร์ดควบคุม</button>
+                <button id="tab-form-btn" onclick="switchPage('form')" class="px-4 py-1.5 rounded-md font-medium text-sm transition text-slate-300 hover:text-white">📝 กรอกข้อมูลเซนเซอร์</button>
+            </div>
+            <span id="connection-status" class="bg-gray-500 text-xs px-3 py-1 rounded-full font-semibold">● Connecting...</span>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-4 md:p-6">
+
+        <div id="page-dashboard" class="space-y-6">
+            
+            <div class="bg-white p-4 rounded-xl shadow-sm flex flex-col xl:flex-row gap-4 items-end justify-between border border-gray-200">
+                <div class="flex flex-wrap gap-4 items-end">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500">Compressor (Line Duck 1-7)</label>
+                        <select id="comp-select" class="mt-1 block w-44 rounded-md shadow-sm p-2 bg-gray-50 font-bold text-blue-600 border border-blue-200" onchange="fetchDashboardData()">
+                            <option value="COMP-01">COMP-01 (High Stage #1)</option>
+                            <option value="COMP-02">COMP-02 (Booster #2)</option>
+                            <option value="COMP-03">COMP-03 (Booster #3)</option>
+                            <option value="COMP-04">COMP-04 (Booster #4)</option>
+                            <option value="COMP-05">COMP-05 (High Stage #5)</option>
+                            <option value="COMP-06">COMP-06 (High Stage #6)</option>
+                            <option value="COMP-07">COMP-07 (High Stage #7)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500">เริ่มวันที่</label>
+                        <input type="datetime-local" id="filter-start" class="mt-1 block rounded-md shadow-sm p-2 bg-gray-50 border border-gray-200 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500">ถึงวันที่</label>
+                        <input type="datetime-local" id="filter-end" class="mt-1 block rounded-md shadow-sm p-2 bg-gray-50 border border-gray-200 text-sm">
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="fetchDashboardData()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-md shadow transition text-sm">🔍 search</button>
+                        <button onclick="clearFilter()" class="bg-gray-400 hover:bg-gray-500 text-white font-medium px-4 py-2 rounded-md shadow transition text-sm">reset</button>
+                    </div>
+                </div>
+                <div class="flex gap-2 xl:border-l xl:pl-4">
+                    <button onclick="applyQuickFilter(1)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium px-3 py-2 rounded-md shadow-sm border text-xs transition">ย้อนหลัง 1 วัน</button>
+                    <button onclick="applyQuickFilter(3)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium px-3 py-2 rounded-md shadow-sm border text-xs transition">ย้อนหลัง 3 วัน</button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-xl shadow-sm border-l-4 border-emerald-500">
+                    <p class="text-xs font-semibold text-gray-400 uppercase">Actual COP (ระบบจริง)</p>
+                    <p id="card-actual-cop" class="text-3xl font-bold text-gray-900 mt-1">--</p>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border-l-4 border-blue-500">
+                    <p class="text-xs font-semibold text-gray-400 uppercase">Cycle COP (ฝั่งน้ำยา)</p>
+                    <p id="card-cycle-cop" class="text-3xl font-bold text-gray-900 mt-1">--</p>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border-l-4 border-cyan-500">
+                    <p class="text-xs font-semibold text-gray-400 uppercase">ภาระความเย็นคำนวณได้ (Q_L)</p>
+                    <p id="card-calculated-ql" class="text-3xl font-bold text-blue-600 mt-1">-- <span class="text-lg font-normal">kW</span></p>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border-l-4 border-amber-500">
+                    <p class="text-xs font-semibold text-gray-400 uppercase">กำลังไฟฟ้าจริงที่ใช้</p>
+                    <p id="card-power" class="text-3xl font-bold text-gray-900 mt-1">-- <span class="text-lg font-normal">kW</span></p>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4 border-b pb-2" id="report-title">📋 ใบแปลผลวิเคราะห์คอมเพรสเซอร์ล่าสุด</h3>
+                <div class="space-y-4" id="diagnosis-report-container">
+                    <p class="text-gray-400 text-sm">ไม่มีข้อมูลในขณะนี้</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h3 class="text-sm font-bold text-red-600 uppercase tracking-wider">🚨 ประวัติการแจ้งเตือนความผิดปกติ (Alarm History)</h3>
+                    <span class="text-xs text-gray-400">แสดงเฉพาะช่วงเวลาที่มีปัญหาจากตัวกรองที่เลือก</span>
+                </div>
+                <div id="alarm-log-container" class="space-y-2 max-h-64 overflow-y-auto pr-2">
+                    <p class="text-gray-400 text-sm">ไม่มีข้อมูลการแจ้งเตือน</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="bg-white p-5 rounded-xl shadow-sm lg:col-span-2 overflow-x-auto">
+                    <div class="relative h-72" style="min-width: 800px;">
+                        <canvas id="copChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm overflow-x-auto">
+                    <div class="relative h-72" style="min-width: 400px;">
+                        <canvas id="powerChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-form" class="hidden max-w-2xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+            <h2 class="text-xl font-bold text-gray-800 mb-2">📝 กรอกข้อมูลประจำวันจากใบ Excel หน้างาน</h2>
+            <p class="text-xs text-amber-600 mb-6 font-medium">⚠️ ระบบปรับปรุงใหม่: หลังบ้านจะดึงข้อมูลสเปกห้องสกรูและถอดสูตรคำนวณความเย็นให้เองตามหลักวิศวกรรม</p>
+            
+            <form id="scada-form" onsubmit="submitForm(event)" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs font-bold text-gray-600">เลือกเครื่องจักรที่ต้องการบันทึก *</label>
+                        <select id="form-comp-id" class="mt-1 block w-full rounded-lg bg-gray-50 p-2 border font-semibold text-slate-700">
+                            <option value="COMP-01">COMP-01 (High Stage #1)</option>
+                            <option value="COMP-02">COMP-02 (Booster #2)</option>
+                            <option value="COMP-03">COMP-03 (Booster #3)</option>
+                            <option value="COMP-04">COMP-04 (Booster #4)</option>
+                            <option value="COMP-05">COMP-05 (High Stage #5)</option>
+                            <option value="COMP-06">COMP-06 (High Stage #6)</option>
+                            <option value="COMP-07">COMP-07 (High Stage #7)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-400">Run Hours สะสม (ไม่บังคับกรอก)</label>
+                        <input type="number" step="any" id="form-run-hours" class="mt-1 block w-full rounded-lg p-2 border bg-gray-50/50" placeholder="เว้นว่างไว้ได้">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 gap-4">
+                    <div><label class="text-xs font-bold text-gray-600">Slide Valve Status (%) *</label><input type="number" step="any" id="form-slide-valve" class="mt-1 block w-full rounded-lg p-2 border" placeholder="71" required></div>
+                </div>
+                <div class="border-t pt-2"><span class="text-xs font-bold text-blue-600 uppercase">🔵 สภาวะฝั่งดูด (Suction Side)</span></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="text-xs font-bold text-gray-600">SP (kg/cm²)</label><input type="number" step="any" id="form-sp" class="mt-1 block w-full rounded-lg p-2 border" placeholder="1.3" required></div>
+                    <div><label class="text-xs font-bold text-gray-600">ST (°C)</label><input type="number" step="any" id="form-st" class="mt-1 block w-full rounded-lg p-2 border" placeholder="-8" required></div>
+                </div>
+                <div class="border-t pt-2"><span class="text-xs font-bold text-red-600 uppercase">🔴 สภาวะฝั่งจ่าย & ไฟฟ้า (Discharge & Amp)</span></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="text-xs font-bold text-gray-600">DP (kg/cm²)</label><input type="number" step="any" id="form-dp" class="mt-1 block w-full rounded-lg p-2 border" placeholder="14" required></div>
+                    <div><label class="text-xs font-bold text-gray-600">DT (°C)</label><input type="number" step="any" id="form-dt" class="mt-1 block w-full rounded-lg p-2 border" placeholder="81" required></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="text-xs font-bold text-gray-600">กระแสไฟฟ้ามอเตอร์ (A)</label><input type="number" step="any" id="form-amp" class="mt-1 block w-full rounded-lg p-2 border" placeholder="155" required></div>
+                    <div><label class="text-xs font-bold text-gray-600">OP ความดันน้ำมัน (kg/cm²)</label><input type="number" step="any" id="form-op" class="mt-1 block w-full rounded-lg p-2 border" value="3.0"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="text-xs font-bold text-gray-600">OT อุณหภูมิน้ำมัน (°C)</label><input type="number" step="any" id="form-ot" class="mt-1 block w-full rounded-lg p-2 border" value="58"></div>
+                    <div><label class="text-xs font-bold text-gray-600">Oil Filter Drop (kg/cm²)</label><input type="number" step="any" id="filter" class="mt-1 block w-full rounded-lg p-2 border" value="-0.1"></div>
+                </div>
+                <button type="submit" class="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow transition">💾 บันทึกค่าดิบเซนเซอร์ลงระบบฐานข้อมูล</button>
+            </form>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = "https://cpfbackend.onrender.com";
+        let copChartInstance = null, powerChartInstance = null;
+
+        function switchPage(pageName) {
+            document.getElementById("page-dashboard").classList.toggle("hidden", pageName !== 'dashboard');
+            document.getElementById("page-form").classList.toggle("hidden", pageName !== 'form');
+            document.getElementById("tab-dash-btn").className = pageName === 'dashboard' ? "px-4 py-1.5 rounded-md font-medium text-sm transition bg-blue-600 text-white shadow" : "px-4 py-1.5 rounded-md font-medium text-sm transition text-slate-300 hover:text-white";
+            document.getElementById("tab-form-btn").className = pageName === 'form' ? "px-4 py-1.5 rounded-md font-medium text-sm transition bg-blue-600 text-white shadow" : "px-4 py-1.5 rounded-md font-medium text-sm transition text-slate-300 hover:text-white";
+            if (pageName === 'dashboard') fetchDashboardData();
+        }
+
+        function clearFilter() {
+            document.getElementById('filter-start').value = '';
+            document.getElementById('filter-end').value = '';
+            fetchDashboardData();
+        }
+
+        function applyQuickFilter(days) {
+            const end = new Date();
+            const start = new Date();
+            start.setDate(start.getDate() - days);
+            const formatLocal = (d) => {
+                const pad = (n) => n.toString().padStart(2, '0');
+                return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+            };
+            document.getElementById('filter-start').value = formatLocal(start);
+            document.getElementById('filter-end').value = formatLocal(end);
+            fetchDashboardData();
+        }
+
+        async function fetchDashboardData() {
+            const compressorId = document.getElementById("comp-select").value;
+            const startDate = document.getElementById("filter-start").value;
+            const endDate = document.getElementById("filter-end").value;
+            const statusLabel = document.getElementById("connection-status");
+            let url = `${API_URL}/${compressorId}?limit=200`;
+            if (startDate) url += `&start_date=${encodeURIComponent(new Date(startDate).toISOString())}`;
+            if (endDate) url += `&end_date=${encodeURIComponent(new Date(endDate).toISOString())}`;
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Connection Error");
+                const data = await response.json();
+                if (data.length === 0) {
+                    document.getElementById("report-title").innerText = `📋 ใบแปลผลวิเคราะห์คอมเพรสเซอร์ล่าสุด`;
+                    document.getElementById("diagnosis-report-container").innerHTML = `<p class="text-amber-500 text-sm font-semibold">⚠️ ไม่พบข้อมูลในช่วงเวลาที่เลือก</p>`;
+                    document.getElementById("alarm-log-container").innerHTML = `<p class="text-gray-400 text-sm">ไม่มีข้อมูลการแจ้งเตือน</p>`;
+                    clearCards();
+                    return;
+                }
+                const latest = data[0].diagnosis;
+                document.getElementById("report-title").innerText = `📋 ใบแปลผลวิเคราะห์เครื่องล่าสุด: ${latest.compressor_name_spec} (${data[0].compressor_id})`;
+                document.getElementById("card-actual-cop").innerText = latest.actual_cop;
+                document.getElementById("card-cycle-cop").innerText = latest.cycle_cop;
+                document.getElementById("card-calculated-ql").innerHTML = `${latest.calculated_ql_kw} <span class="text-lg font-normal">kW</span>`;
+                document.getElementById("card-power").innerHTML = `${latest.power_kw} <span class="text-lg font-normal">kW</span>`;
+                buildDiagnosisReport(data[0]);
+                buildAlarmLog(data);
+                renderCharts([...data].reverse());
+                statusLabel.className = "bg-green-500 text-xs px-3 py-1 rounded-full font-semibold";
+                statusLabel.innerText = "● Live: " + data[0].compressor_id;
+            } catch (err) {
+                statusLabel.className = "bg-red-500 text-xs px-3 py-1 rounded-full font-semibold";
+                statusLabel.innerText = "🔴 Connection Error";
+            }
+        }
+
+        function clearCards() {
+            document.getElementById("card-actual-cop").innerText = "--";
+            document.getElementById("card-cycle-cop").innerText = "--";
+            document.getElementById("card-calculated-ql").innerHTML = `-- <span class="text-lg font-normal">kW</span>`;
+            document.getElementById("card-power").innerHTML = `-- <span class="text-lg font-normal">kW</span>`;
+            if (copChartInstance) copChartInstance.destroy();
+            if (powerChartInstance) powerChartInstance.destroy();
+        }
+
+        function buildDiagnosisReport(record) {
+            const sys = record.diagnosis.systems;
+            const container = document.getElementById("diagnosis-report-container");
+            const badgeColor = (status) => status === 'Normal' ? 'bg-emerald-100 text-emerald-800' : (status === 'Warning' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800');
+            const runHourDisplay = record.run_hours ? `${record.run_hours} h` : "ไม่ได้ระบุ";
+            const recordDate = new Date(record.timestamp);
+            const localTimeStr = recordDate.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', hour12: false });
+            container.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="p-4 rounded-lg bg-gray-50 border">
+                        <div class="flex justify-between items-center"><span class="text-xs font-bold text-gray-500 uppercase">1. ระบบเซนเซอร์ทางดูด</span><span class="text-xs font-bold px-2.5 py-0.5 rounded-full ${badgeColor(sys.sensor.status)}">${sys.sensor.status}</span></div>
+                        <p class="text-sm mt-2 text-gray-700">${sys.sensor.text}</p>
+                        <p class="text-xs text-gray-400 mt-2">Superheat จริง: ${record.diagnosis.superheat_k} K (T_sat: ${record.diagnosis.t_sat_theory_c}°C)</p>
+                    </div>
+                    <div class="p-4 rounded-lg bg-gray-50 border">
+                        <div class="flex justify-between items-center"><span class="text-xs font-bold text-gray-500 uppercase">2. คอยล์ร้อน / ระบายความร้อน</span><span class="text-xs font-bold px-2.5 py-0.5 rounded-full ${badgeColor(sys.condenser.status)}">${sys.condenser.status}</span></div>
+                        <p class="text-sm mt-2 text-gray-700">${sys.condenser.text}</p>
+                        <p class="text-xs text-gray-400 mt-2">แรงดันฝั่งจ่าย (DP): ${record.inputs_snapshot.dp} kg/cm²</p>
+                    </div>
+                    <div class="p-4 rounded-lg bg-gray-50 border">
+                        <div class="flex justify-between items-center"><span class="text-xs font-bold text-gray-500 uppercase">3. ระบบน้ำมันหล่อลื่น & สเปก</span><span class="text-xs font-bold px-2.5 py-0.5 rounded-full ${badgeColor(sys.oil.status)}">${sys.oil.status}</span></div>
+                        <p class="text-sm mt-2 text-gray-700">${sys.oil.text}</p>
+                        <p class="text-xs text-gray-400 mt-2">ชั่วโมงเครื่อง: ${runHourDisplay} | เวลาบันทึกในระบบ: ${localTimeStr}</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function buildAlarmLog(records) {
+            const container = document.getElementById("alarm-log-container");
+            let html = "";
+            let hasAlarm = false;
+            records.forEach(record => {
+                const sys = record.diagnosis.systems;
+                const issues = [];
+                if (sys.sensor.status !== 'Normal') issues.push(`เซนเซอร์ทางดูด: ${sys.sensor.text}`);
+                if (sys.condenser.status !== 'Normal') issues.push(`คอยล์ร้อน: ${sys.condenser.text}`);
+                if (sys.oil.status !== 'Normal') issues.push(`ระบบน้ำมันหล่อลื่น: ${sys.oil.text}`);
+                if (issues.length > 0) {
+                    hasAlarm = true;
+                    const isAbnormal = sys.sensor.status === 'Abnormal' || sys.condenser.status === 'Abnormal' || sys.oil.status === 'Abnormal';
+                    html += `<div class="p-3 rounded-lg border ${isAbnormal ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'} flex items-center justify-between text-sm">
+                        <div class="font-bold text-gray-800">${isAbnormal ? '🔴' : '🟡'} ${new Date(record.timestamp).toLocaleString('th-TH')} น.</div>
+                        <div class="text-gray-700">${issues.join(', ')}</div>
+                    </div>`;
+                }
+            });
+            container.innerHTML = hasAlarm ? html : `<div class="p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-600 text-sm font-semibold">✅ ไม่พบความผิดปกติในช่วงเวลานี้</div>`;
+        }
+
+        function renderCharts(records) {
+            // เราจะใช้ labels แค่บอกเวลา (เพื่อความสะอาดของแกน X)
+            const labels = records.map(r => {
+                return new Date(r.timestamp).toLocaleTimeString('th-TH', { 
+                    timeZone: 'Asia/Bangkok', 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: false 
+                });
+            });
+            
+            // ฟังก์ชันตั้งค่า Tooltip ที่จะโชว์วันที่เพิ่มเข้าไป
+            const tooltipCallbacks = {
+                title: (context) => {
+                    const index = context[0].dataIndex;
+                    const record = records[index];
+                    const dateObj = new Date(record.timestamp);
+                    // แสดง วัน/เดือน/ปี และเวลา
+                    return dateObj.toLocaleString('th-TH', { 
+                        timeZone: 'Asia/Bangkok',
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false 
+                    }) + " น.";
+                }
+            };
+
+            const ctxCop = document.getElementById('copChart').getContext('2d');
+            if (copChartInstance) copChartInstance.destroy();
+            copChartInstance = new Chart(ctxCop, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Actual COP (ระบบจริง)', data: records.map(r => r.diagnosis.actual_cop), borderColor: 'rgb(16, 185, 129)', tension: 0.2 },
+                        { label: 'Cycle COP (ฝั่งน้ำยา)', data: records.map(r => r.diagnosis.cycle_cop), borderColor: 'rgb(59, 130, 246)', borderDash: [5, 5], tension: 0.2 }
+                    ]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: {
+                        tooltip: { callbacks: tooltipCallbacks } // 🟢 เพิ่มตรงนี้
+                    },
+                    scales: { x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 45 } } }
+                }
+            });
+
+            const ctxPower = document.getElementById('powerChart').getContext('2d');
+            if (powerChartInstance) powerChartInstance.destroy();
+            powerChartInstance = new Chart(ctxPower, {
+                type: 'line',
+                data: { labels: labels, datasets: [{ label: 'ภาระไฟฟ้า (kW)', data: records.map(r => r.diagnosis.power_kw), borderColor: 'rgb(245, 158, 11)', tension: 0.2 }] },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: {
+                        tooltip: { callbacks: tooltipCallbacks } // 🟢 เพิ่มตรงนี้
+                    },
+                    scales: { x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 45 } } }
+                }
+            });
+        }
+
+        async function submitForm(event) {
+            event.preventDefault();
+            const runHoursInput = document.getElementById("form-run-hours").value;
+            const payload = {
+                compressor_id: document.getElementById("form-comp-id").value,
+                run_hours: runHoursInput === "" ? null : parseFloat(runHoursInput),
+                slide_valve_percent: parseFloat(document.getElementById("form-slide-valve").value),
+                cooling_capacity_kw: 0.0, 
+                sp_kg: parseFloat(document.getElementById("form-sp").value),
+                st_c: parseFloat(document.getElementById("form-st").value),
+                dp_kg: parseFloat(document.getElementById("form-dp").value),
+                dt_c: parseFloat(document.getElementById("form-dt").value),
+                current_amp: parseFloat(document.getElementById("form-amp").value),
+                op_kg: parseFloat(document.getElementById("form-op").value),
+                ot_c: parseFloat(document.getElementById("form-ot").value),
+                oil_filter_drop: parseFloat(document.getElementById("filter").value)
+            };
+            try {
+                const response = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+                if (response.ok) { alert("💾 บันทึกค่าลงระบบสำเร็จ!"); document.getElementById("scada-form").reset(); switchPage('dashboard'); }
+            } catch (err) { alert("🔴 ดึงข้อมูลขัดข้อง"); }
+        }
+        window.onload = fetchDashboardData;
+    </script>
+</body>
+</html>
